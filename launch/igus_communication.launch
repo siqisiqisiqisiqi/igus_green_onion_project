@@ -1,0 +1,5 @@
+<launch>
+    <arg name="node_start_delay" default="2"/>
+    <node pkg="igus_fruit_packaging" type="igus_communication.py" name="igus_communication" output="screen">
+    </node>
+</launch>
