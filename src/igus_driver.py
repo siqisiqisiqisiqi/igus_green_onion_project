@@ -2,13 +2,30 @@ import numpy as np
 
 
 class IgusDriverEncoder():
-    def cartesian_move(self, position):
+    def cartesian_move(self, position, yaw, vel=100):
+        """_summary_
+
+        Parameters
+        ----------
+        position : array
+            desired position in mm
+        yaw : float
+            desired orientation in degree
+        vel : int, optional
+            robot velocity mm/s, by default 500
+
+        Returns
+        -------
+        _type_
+            _description_
+        """
         x = int(position[0])
         y = int(position[1])
         z = int(position[2])
+        yaw = -1 * yaw + 118
         # constranit the work range
-        if z < 50:
-            z = 50
+        if z < 75:
+            z = 75
             print("z exceed the range!!!")
         if z > 300:
             z = 300
@@ -19,24 +36,32 @@ class IgusDriverEncoder():
         if abs(y) > 250:
             y = np.sign(y) * 250
             print("y exceed the range!!!")
-        message = f"CRISTART 1234 CMD Move Cart {x} {y} {z} 0 0 0 0 0 0 500 CRIEND"
+        message = f"CRISTART 1234 CMD Move Cart {x} {y} {z} 0 0 0 {yaw} 0 0 {vel} CRIEND"
         # message = f"CRISTART 1234 CMD Move Cart {x} {y} {z} 0 0 0 0 0 0 200 CRIEND"
         encoded = message.encode('utf-8')
         move_array = bytearray(encoded)
         return message
 
-    def gripper(self, D21=0, D22=0):
-        if D22 == 0:
-            messageD22 = "CRISTART 1234 CMD DOUT 22 false CRIEND"
-        else:
-            messageD22 = "CRISTART 1234 CMD DOUT 22 true CRIEND"
-        encoded = messageD22.encode('utf-8')
-        Dout_arrayD22 = bytearray(encoded)
+    def gripper(self, D20: int = None, D21: int = None):
+        if D20 != None:
+            if D20 == 0:
+                message = "CRISTART 1234 CMD DOUT 20 false CRIEND"
+            else:
+                message = "CRISTART 1234 CMD DOUT 20 true CRIEND"
+            print(message)
+            encoded = message.encode('utf-8')
+            Dout_array = bytearray(encoded)
+            return message
 
-        if D21 == 0:
-            messageD21 = "CRISTART 1234 CMD DOUT 21 false CRIEND"
+        elif D21 != None:
+            if D21 == 0:
+                message = "CRISTART 1234 CMD DOUT 21 false CRIEND"
+            else:
+                message = "CRISTART 1234 CMD DOUT 21 true CRIEND"
+            print(message)
+            encoded = message.encode('utf-8')
+            Dout_array = bytearray(encoded)
+            return message
+
         else:
-            messageD21 = "CRISTART 1234 CMD DOUT 21 true CRIEND"
-        encoded = messageD21.encode('utf-8')
-        Dout_arrayD21 = bytearray(encoded)
-        return messageD21, messageD22
+            return None

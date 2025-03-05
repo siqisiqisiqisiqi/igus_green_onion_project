@@ -32,6 +32,8 @@ class IgusCommunication():
         rospy.Subscriber("/igus_message", String, self.message_callback)
         # cartesian position
         self.cartesian_position = None
+        # yaw orientation
+        self.yaw = None
         # digital input
         self.din = []
         # alive message frequency
@@ -47,9 +49,6 @@ class IgusCommunication():
         array = bytearray(encodedConnect)
         self.sock.sendall(array)
         rospy.sleep(1)
-        # array = bytearray(encodedReset)
-        # self.sock.sendall(array)
-        # rospy.sleep(1)
         array = bytearray(encodedEnable)
         self.sock.sendall(array)
         rospy.sleep(1)
@@ -104,16 +103,33 @@ class IgusCommunication():
                 i_f = 0
             data = self.sock.recv(1024).decode()
             bot_status = RobotFeedback()
+
             try:
                 result1 = re.findall(r'DIN \d+', data, re.DOTALL)
                 a = result1[0].split()
                 din = int(a[1])
                 self.din = [i + 1 for i,
                             j in enumerate(bin(din)[:1:-1]) if j == "1"]
+            except:
+                pass
+
+            try:
                 result2 = re.findall(
                     r'POSCARTROBOT(?: \-?\d+\.?\d+){3}', data, re.DOTALL)
                 b = result2[0].split()
                 self.cartesian_position = [float(ele) for ele in b[1:]]
+            except:
+                pass
+
+            try:
+                result3 = re.findall(
+                    r'POSJOINTCURRENT(?: \-?\d+\.?\d+){9}', data, re.DOTALL)
+                b = result3[0].split()
+                self.yaw = -1 * float(b[7]) + 118
+            except:
+                pass
+
+            try:
                 if len(self.din) == 0:
                     bot_status.digital_input = [-1]
                 else:
@@ -121,6 +137,7 @@ class IgusCommunication():
                 bot_status.x = self.cartesian_position[0]
                 bot_status.y = self.cartesian_position[1]
                 bot_status.z = self.cartesian_position[2]
+                bot_status.yaw = self.yaw
                 self.pub.publish(bot_status)
             except:
                 pass

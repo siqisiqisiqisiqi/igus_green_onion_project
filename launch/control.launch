@@ -1,0 +1,10 @@
+<launch>
+
+    <arg name="node_start_delay" default="2"/>
+    <node pkg="igus_green_onion_project" type="igus_communication.py" name="igus_communication" output="screen">
+    </node>
+
+    <node pkg="igus_green_onion_project" type="green_onion_igus_control.py" name="igus_controller" output="screen" launch-prefix="bash -c 'sleep $(arg node_start_delay); $0 $@'">
+    </node>
+
+</launch>
