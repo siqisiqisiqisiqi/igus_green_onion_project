@@ -46,7 +46,7 @@ def angle_thres(yaw):
 def camera_to_gripper(kpt):
     kpt = kpt.reshape((-1, 3)).T
     kpt_gripper = R_cam2gripper @ kpt + t_cam2gripper
-    kpt_gripper = kpt_gripper.T.squeeze()
+    kpt_gripper = kpt_gripper.T
     return kpt_gripper
 
 
@@ -57,7 +57,7 @@ def gripper_to_base(kpt, actual_pose):
     T_gripper2base = create_robot_pose(x, y, z, theta)
     R_gripper2base = T_gripper2base[:3, :3]
     t_gripper2base = T_gripper2base[:3, -1].reshape((3, 1))
-    kpt = kpt.reshape((3, 1))
+    kpt = kpt.reshape((3, -1))
     kpt_base = R_gripper2base @ kpt + t_gripper2base
     return kpt_base.flatten() + offset
 
@@ -79,7 +79,10 @@ def kpt_trans(kpt, yaw, offset):
     kpt[1] += offset / 2 * np.sin(yaw_radian)
     return kpt
 
-kpt_list = [np.array([ 83.66831426, -30.8121206 ,  0]), np.array([169.86603354, -82.89479143, 0]), np.array([125.4776092 , -47.54951216,  0])]
-target = [91.19491196, -66.17415619, 0]
-closest_point = kpt_matching(kpt_list, target)
-print(closest_point)
+# kpt_list = [np.array([ 83.66831426, -30.8121206 ,  0]), np.array([169.86603354, -82.89479143, 0]), np.array([125.4776092 , -47.54951216,  0])]
+# target = [91.19491196, -66.17415619, 0]
+# closest_point = kpt_matching(kpt_list, target)
+# print(closest_point)
+kpt = np.array([[-87.35646057, -50.05045319, 88.17327881]])
+result = camera_to_gripper(kpt)
+print(result)

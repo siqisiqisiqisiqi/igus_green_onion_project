@@ -13,19 +13,17 @@ from numpy.linalg import norm
 from std_msgs.msg import String
 from scipy.spatial.transform import Rotation as R
 
-from std_msgs.msg import Float32MultiArray
 from src.igus_driver import IgusDriverEncoder
 from igus_fruit_packaging.msg import RobotFeedback
 from src.utils import angle_thres, camera_to_gripper, gripper_to_base, kpt_matching, kpt_trans
-from wrist_camera.srv import ObjectDetection, ObjectDetectionResponse
+from wrist_camera.srv import ObjectDetection
+from tof_detection.srv import EthObjectDetection
 
 
 class IgusController():
     def __init__(self):
         rospy.init_node("igus_controller")
 
-        # Init green onion position subscribers
-        rospy.Subscriber("/grasp_pose", Float32MultiArray, self.get_grasp_pose)
         # Init robot feedback subscribers
         rospy.Subscriber("/actual_position", RobotFeedback,
                          self.get_robot_data)
@@ -42,10 +40,9 @@ class IgusController():
         self.M = r.as_matrix()
         self.T = np.array([[56], [12], [80]])
 
-        # system home in millimeter
         self.home = np.array([0, 0, 300])
-
         self.pick_offset = np.array([0, 0, 30])
+
         self.grasp_position = None
         self.grasp_yaw = None
         self.actual_pose = None
@@ -55,31 +52,14 @@ class IgusController():
         rospy.wait_for_service("detect_object")
         self.detect_object = rospy.ServiceProxy(
             "detect_object", ObjectDetection)
+
+        # ETH camera service initialization
+        rospy.wait_for_service("eth_detect_object")
+        self.eth_detect_object = rospy.ServiceProxy(
+            "eth_detect_object", EthObjectDetection)
+
         # system frequency
         self.rate = rospy.Rate(10)
-
-    def get_grasp_pose(self, data):
-        """_summary_
-
-        Parameters
-        ----------
-        data : Float32MultiArray
-            [x(mm),y(mm),z(mm),yaw(radian)]
-        """
-        # rospy.loginfo(f"data value is {data.data}")
-        try:
-            grasp_position = np.array(data.data[:3])
-            grasp_yaw = -1 * data.data[-1] * 180 / np.pi
-            self.grasp_yaw = angle_thres(grasp_yaw)
-            # The length of the gripper is 0.18m
-            grasp_position = grasp_position.reshape((3, 1))
-            grasp_position = self.M @ grasp_position + self.T
-            self.grasp_position = grasp_position.squeeze()
-            # rospy.loginfo(f"grasp position is {self.grasp_position}")
-        except:
-            self.grasp_yaw = None
-            self.grasp_position = None
-            # rospy.loginfo(f"No suitable green onion to pick!")
 
     def get_robot_data(self, data):
         # [mm, mm, mm, degree]
@@ -97,6 +77,13 @@ class IgusController():
         desired_pose = [*p, yaw]
         while norm(np.array(self.actual_pose) - np.array(desired_pose)) > 2:
             rospy.sleep(0.05)
+
+    def conveyor_move(self):
+        message = self.encoder.conveyor(D22=1)
+        self.robot_pub.publish(message)
+        rospy.sleep(3)
+        message = self.encoder.conveyor(D22=0)
+        rospy.sleep(0.5)
 
     def gripper_open(self):
         message = self.encoder.gripper(D21=1)
@@ -124,6 +111,7 @@ class IgusController():
             rospy.loginfo(0.5)
             response = self.detect_object()
         if len(response.x) == 0:
+            rospy.loginfo(f"Wrist camera can't detect the green onion!")
             return None
         x = response.x
         y = response.y
@@ -134,31 +122,45 @@ class IgusController():
         for kpt in self.wrist_camera_kpts:
             kpt_base = gripper_to_base(kpt, self.actual_pose)
             kpt_base_list.append(kpt_base)
-        rospy.loginfo(f"kpt base list is {kpt_base_list}.")
-        rospy.loginfo(f"target position is {p}.")
         kpt_optimal = kpt_matching(kpt_base_list, p)
         kpt_optimal = kpt_trans(kpt_optimal, yaw, offset=180)
         return kpt_optimal
 
-    def pick_and_place(self, p, yaw, index=0):
-        target_p = [-220, -50 + 50 * index, 110]  # [x, y, z]
-        target_yaw = 0  # orientation
+    def eth_detection(self):
+        res = self.eth_detect_object()
+        try:
+            if res.z == 0:
+                self.grasp_yaw = None
+                self.grasp_position = None
+            else:
+                grasp_position = np.array([res.x, res.y, res.z])
+                grasp_yaw = -1 * res.yaw * 180 / np.pi
+                self.grasp_yaw = angle_thres(grasp_yaw)
+                grasp_position = grasp_position.reshape((3, 1))
+                grasp_position = self.M @ grasp_position + self.T
+                self.grasp_position = grasp_position.squeeze()
+        except:
+            self.grasp_yaw = None
+            self.grasp_position = None
 
-        p_offset = kpt_trans(p, yaw, offset=-100)
+    def pick_and_place(self, p, yaw, index=0):
+        target_p = [-220, -50 + 20 * index, 110]  # [x, y, z]
+        target_yaw = 90  # orientation
+
+        p_offset = kpt_trans(p, yaw, offset=-60)
         p_offset = p_offset + self.pick_offset
 
         self.robot_move(p_offset, yaw)
         rospy.sleep(0.5)
         p = self.kpt_process(p, yaw)
-        rospy.loginfo(f"p value is {p} !!!!!")
         self.robot_move(p, yaw)
-        # self.gripper_close()
-        # self.robot_move(self.home, yaw)
-        # self.robot_move(target_p, target_yaw)
-        # self.gripper_close_release()
-        # self.robot_move(self.home, target_yaw)
-        # self.gripper_open()
-        # self.gripper_open_release()
+        self.gripper_close()
+        self.robot_move(self.home, yaw)
+        self.robot_move(target_p, target_yaw)
+        self.gripper_close_release()
+        self.robot_move(self.home, target_yaw)
+        self.gripper_open()
+        self.gripper_open_release()
 
     def run(self):
         rospy.loginfo(
@@ -169,17 +171,25 @@ class IgusController():
 
         index = 0
         while not rospy.is_shutdown():
+            self.eth_detection()
             if self.grasp_yaw is not None and self.grasp_position is not None:
                 p = self.grasp_position
                 yaw = self.grasp_yaw
 
                 self.pick_and_place(p, yaw, index)
-                index = index + 1 if index < 3 else 0
+                index = index + 1
+                if index >= 6:
+                    rospy.loginfo(f"Completed the pick-and-place process!")
+                    self.conveyor_move()
+                    break
 
                 self.grasp_yaw = None
                 self.grasp_position = None
+                rospy.loginfo(f"successfully pick and place one green onion!")
 
-                break
+                rospy.sleep(1)
+            else:
+                rospy.loginfo("Not detect the green ONION!")
             self.rate.sleep()
             # break
 

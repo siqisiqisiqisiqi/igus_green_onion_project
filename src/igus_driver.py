@@ -48,7 +48,6 @@ class IgusDriverEncoder():
                 message = "CRISTART 1234 CMD DOUT 20 false CRIEND"
             else:
                 message = "CRISTART 1234 CMD DOUT 20 true CRIEND"
-            print(message)
             encoded = message.encode('utf-8')
             Dout_array = bytearray(encoded)
             return message
@@ -58,10 +57,16 @@ class IgusDriverEncoder():
                 message = "CRISTART 1234 CMD DOUT 21 false CRIEND"
             else:
                 message = "CRISTART 1234 CMD DOUT 21 true CRIEND"
-            print(message)
             encoded = message.encode('utf-8')
             Dout_array = bytearray(encoded)
             return message
 
         else:
             return None
+        
+    def conveyor(self, D22: int = 0):
+        if D22 == 0:
+            message = "CRISTART 1234 CMD DOUT 22 false CRIEND"
+        else:
+            message = "CRISTART 1234 CMD DOUT 22 true CRIEND"
+        return message
