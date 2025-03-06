@@ -11,12 +11,13 @@ import rospy
 import numpy as np
 from numpy.linalg import norm
 from std_msgs.msg import String
+from scipy.spatial.transform import Rotation as R
 
-from wrist_camera.msg import Kpt, Kpts
 from std_msgs.msg import Float32MultiArray
 from src.igus_driver import IgusDriverEncoder
 from igus_fruit_packaging.msg import RobotFeedback
 from src.utils import angle_thres, camera_to_gripper, gripper_to_base, kpt_matching, kpt_trans
+from wrist_camera.srv import ObjectDetection, ObjectDetectionResponse
 
 
 class IgusController():
@@ -28,8 +29,6 @@ class IgusController():
         # Init robot feedback subscribers
         rospy.Subscriber("/actual_position", RobotFeedback,
                          self.get_robot_data)
-        # Init wrist camera position
-        rospy.Subscriber("/wrist_kpts", Kpts, self.get_wrist_camera_data)
 
         # Init igus message publisher to control the robot
         self.robot_pub = rospy.Publisher("igus_message", String, queue_size=10)
@@ -38,8 +37,10 @@ class IgusController():
         self.encoder = IgusDriverEncoder()
 
         # Init the transformation between robot frame and world frame
-        self.M = np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
-        self.T = np.array([[50], [12], [80]])
+        euler = [-179.8, 0.4, -1.2]
+        r = R.from_euler("xyz", euler, degrees=True)
+        self.M = r.as_matrix()
+        self.T = np.array([[56], [12], [80]])
 
         # system home in millimeter
         self.home = np.array([0, 0, 300])
@@ -50,21 +51,12 @@ class IgusController():
         self.actual_pose = None
         self.wrist_camera_kpts = None
 
+        # service initialization
+        rospy.wait_for_service("detect_object")
+        self.detect_object = rospy.ServiceProxy(
+            "detect_object", ObjectDetection)
         # system frequency
         self.rate = rospy.Rate(10)
-
-    def get_wrist_camera_data(self, data):
-        try:
-            num = data.num
-            kpts_data = np.zeros((num, 3))
-            for i, kpt in enumerate(data.kpt):
-                kpt = np.array(kpt.data)
-                kpt = camera_to_gripper(kpt)
-                kpts_data[i] = kpt
-            self.wrist_camera_kpts = kpts_data
-        except:
-            pass
-            # rospy.loginfo(f"Not detect the green onion!")
 
     def get_grasp_pose(self, data):
         """_summary_
@@ -74,7 +66,7 @@ class IgusController():
         data : Float32MultiArray
             [x(mm),y(mm),z(mm),yaw(radian)]
         """
-        rospy.loginfo(f"data value is {data.data}")
+        # rospy.loginfo(f"data value is {data.data}")
         try:
             grasp_position = np.array(data.data[:3])
             grasp_yaw = -1 * data.data[-1] * 180 / np.pi
@@ -127,31 +119,41 @@ class IgusController():
         rospy.sleep(1)
 
     def kpt_process(self, p, yaw):
+        response = self.detect_object()
+        if len(response.x) == 0:
+            rospy.loginfo(0.5)
+            response = self.detect_object()
+        if len(response.x) == 0:
+            return None
+        x = response.x
+        y = response.y
+        z = response.z
+        wrist_camera_kpts = np.array([x, y, z]).T
+        self.wrist_camera_kpts = camera_to_gripper(wrist_camera_kpts)
         kpt_base_list = []
-        # TODO: what happens if there is no self.wrist_camera_kpts
         for kpt in self.wrist_camera_kpts:
             kpt_base = gripper_to_base(kpt, self.actual_pose)
             kpt_base_list.append(kpt_base)
+        rospy.loginfo(f"kpt base list is {kpt_base_list}.")
+        rospy.loginfo(f"target position is {p}.")
         kpt_optimal = kpt_matching(kpt_base_list, p)
-        kpt_optimal = kpt_trans(kpt_optimal, yaw)
+        kpt_optimal = kpt_trans(kpt_optimal, yaw, offset=180)
         return kpt_optimal
 
     def pick_and_place(self, p, yaw, index=0):
         target_p = [-220, -50 + 50 * index, 110]  # [x, y, z]
         target_yaw = 0  # orientation
 
-        p[0] = p[0] - 5  # x offset
-        p_offset = p + self.pick_offset
-        # p = p + np.array([0, 0, -15])
+        p_offset = kpt_trans(p, yaw, offset=-100)
+        p_offset = p_offset + self.pick_offset
 
         self.robot_move(p_offset, yaw)
-        rospy.sleep(2)
+        rospy.sleep(0.5)
         p = self.kpt_process(p, yaw)
-        rospy.loginfo(f"p value is {p}")
-        # self.robot_move(p, yaw)
+        rospy.loginfo(f"p value is {p} !!!!!")
+        self.robot_move(p, yaw)
         # self.gripper_close()
-        self.robot_move(self.home, yaw)
-        rospy.sleep(4)
+        # self.robot_move(self.home, yaw)
         # self.robot_move(target_p, target_yaw)
         # self.gripper_close_release()
         # self.robot_move(self.home, target_yaw)
@@ -176,7 +178,7 @@ class IgusController():
 
                 self.grasp_yaw = None
                 self.grasp_position = None
-                # rospy.sleep(2)
+
                 break
             self.rate.sleep()
             # break

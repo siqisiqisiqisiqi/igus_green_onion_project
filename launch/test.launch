@@ -1,0 +1,6 @@
+<launch>
+
+    <node pkg="igus_green_onion_project" type="test_node.py" name="test_node" output="screen">
+    </node>
+
+</launch>

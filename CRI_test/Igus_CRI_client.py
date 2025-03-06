@@ -63,7 +63,7 @@ class AliveDecode(Thread):
                 result3 = re.findall(
                     r'POSJOINTCURRENT(?: \-?\d+\.?\d+){9}', data, re.DOTALL)
                 b = result3[0].split()
-                self.yaw = -1* float(b[7]) + 118
+                self.yaw = -1 * float(b[7]) + 115
                 # self.yaw = 30 - float(b[7]) * 10
             except:
                 pass
@@ -78,7 +78,7 @@ def cartesian_move_array(position):
     x = position[0]
     y = position[1]
     z = position[2]
-    yaw = -1 * position[3] + 118
+    yaw = -1 * position[3] + 115
     message = f"CRISTART 1234 CMD Move Cart {x} {y} {z} 0 0 0 {yaw} 0 0 200 CRIEND"
     encoded = message.encode('utf-8')
     move_array = bytearray(encoded)
@@ -156,7 +156,7 @@ def main():
     # the position is [x(mm), y(mm), z(mm), theta(degree)]
     home = [0, 0, 300, 0]
     position = []
-    position1 = [0, 0, 300, 0]
+    position1 = [0, 0, 300, 30]
     position2 = [0, 0, 300, 0]
     # position3 = [0, 0, 300, 0]
 

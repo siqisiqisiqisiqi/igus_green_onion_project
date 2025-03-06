@@ -125,7 +125,7 @@ class IgusCommunication():
                 result3 = re.findall(
                     r'POSJOINTCURRENT(?: \-?\d+\.?\d+){9}', data, re.DOTALL)
                 b = result3[0].split()
-                self.yaw = -1 * float(b[7]) + 118
+                self.yaw = -1 * float(b[7]) + 115
             except:
                 pass
 

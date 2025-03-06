@@ -22,7 +22,7 @@ class IgusDriverEncoder():
         x = int(position[0])
         y = int(position[1])
         z = int(position[2])
-        yaw = -1 * yaw + 118
+        yaw = -1 * yaw + 115
         # constranit the work range
         if z < 75:
             z = 75
